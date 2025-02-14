@@ -11,4 +11,4 @@ This project explores automatic speech recognition (ASR) post-processing using L
 Install dependencies via:  
 
 ```bash
-pip install -r ./EDA/requirements.txt
+pip install -r requirements.txt
