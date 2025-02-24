@@ -1,0 +1,6 @@
+,WER,METEOR,BERT Precision,BERT Recall,BERT F1
+Top 1,0.021,0.981,0.972,0.973,0.973
+Zero-shot Uncon,0.059,0.955,0.934,0.939,0.937
+Zero-shot Constr,0.049,0.96,0.944,0.946,0.945
+Zero-shot Closest,0.043,0.965,0.949,0.954,0.951
+Oracle,0.01,0.989,0.983,0.985,0.984
