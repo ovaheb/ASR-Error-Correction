@@ -1,5 +1,5 @@
-from utils import *
-from ec_methods import *
+from codes.utils import *
+from codes.ec_methods import *
 
 
 async def track_progress(tasks):
@@ -14,42 +14,38 @@ async def track_progress(tasks):
     return await asyncio.gather(*tasks)
 
     
-async def process_batch(dataset: Dataset, indices: List[int], model: str, client: openai.AsyncOpenAI, postprocessing: Callable[[List[str]], str], 
-    generation_config: dict) -> List[str]:
+async def process_batch(dataset: Dataset, indices: List[int], model: str, client: openai.AsyncOpenAI, postprocessing: Callable[[List[str]], str], generation_config: dict, few_shot: int, error_examples: List[str]) -> List[str]:
     """Processes the dataset asynchronously using OpenAI API with progress tracking."""
     
     tasks = []
     for idx in indices:
         hypotheses, reference = extract_hypotheses(dataset, idx)
-        
         if inspect.iscoroutinefunction(postprocessing):
-            tasks.append(asyncio.create_task(postprocessing(hypotheses, client, model, generation_config)))
+            if few_shot==0:
+                tasks.append(asyncio.create_task(postprocessing(hypotheses, client, model, generation_config)))
+            else:
+                tasks.append(asyncio.create_task(postprocessing(hypotheses, client, model, generation_config, few_shot, error_examples)))
         else:
             tasks.append(asyncio.create_task(asyncio.to_thread(postprocessing, hypotheses, reference)))
     
     results = await track_progress(tasks)
     return results
     
-async def evaluate_model_parallel(dataset: Dataset, model: str, client: openai.AsyncOpenAI, postprocessing: Callable[[List[str]], str],
-                            generation_config: dict, results_path: str, step: int=256, experimental=False):
+async def evaluate_model_parallel(dataset: Dataset, model: str, client: openai.AsyncOpenAI, postprocessing: Callable[[List[str]], str], generation_config: dict, results_path: str, step: int=256, experimental=False, few_shot: int=0, error_examples: List[str]=None):
     """Evaluates the model asynchronously with progress tracking, handling Jupyter compatibility."""
     
     total_rows = len(dataset)
     all_predictions = []
-    
     for start in range(0, total_rows, step):
         end = min(start + step, total_rows)
         batch_indices = list(range(start, end))
-        batch_predictions = await process_batch(dataset, batch_indices, model, client, postprocessing, generation_config)
+        batch_predictions = await process_batch(dataset, batch_indices, model, client, postprocessing, generation_config, few_shot, error_examples)
         all_predictions.extend(batch_predictions)
-    
     
     # Normalize for evaluation
     if 'DeepSeek' in model:
         all_predictions = [clean_deepseek_output(pred) for pred in all_predictions] 
     all_predictions = [clean_asr_output(remove_punctuation(pred.lower())) for pred in all_predictions]
-    
-    
     all_references = dataset['target'] if 'target' in dataset.features else dataset['output']
     all_references = [clean_asr_output(remove_punctuation(ref.lower())) for ref in all_references]
 
