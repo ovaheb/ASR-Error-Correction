@@ -64,4 +64,4 @@ Example 1:\n
 \nYour output: tomme de montagne is a collective term for the upland varieties e g \n\n"""]
 
 lrs_examples = []
-chime = []
+chime_examples = []
