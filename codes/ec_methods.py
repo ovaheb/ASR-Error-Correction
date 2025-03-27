@@ -163,7 +163,7 @@ async def zero_shot_instruct7(hypotheses, client, model, generation_config):
     return await get_prediction(client, model, messages, generation_config)
 
 async def zero_shot_instruct7_closest(hypotheses, client, model, generation_config):
-    unconstrained_result = await zero_shot_instruct8(hypotheses, client, model, generation_config)
+    unconstrained_result = await zero_shot_instruct7(hypotheses, client, model, generation_config)
     distances = [compute_levenshtein_distance(unconstrained_result, hyp) for hyp in hypotheses]
     best_idx = np.argmin(distances)
     return hypotheses[best_idx]
@@ -192,6 +192,25 @@ async def zero_shot_instruct8_closest(hypotheses, client, model, generation_conf
     distances = [compute_levenshtein_distance(unconstrained_result, hyp) for hyp in hypotheses]
     best_idx = np.argmin(distances)
     return hypotheses[best_idx]
+
+async def zero_shot_instruct9(hypotheses, client, model, generation_config):
+    prompt = """You are an excellent assistant for speech recognition system. Your task is to check and correct potential
+    errors in speech transcriptions. Please follow the following rules:\n"""
+    prompt += "\n Here is the top hypothesis:\n" + hypotheses[0] + "\n These are less probable hypotheses which you can pick corrected words from:\n"""
+    for idx, hypothesis in enumerate(hypotheses[1:0]):
+        prompt += "<hypothesis"+ str(idx) + ">" + hypothesis + "</hypothesis"+ str(idx) + ">\n"
+    
+    prompt += """\n
+    1. If any word in the original sentence looks weird or inconsistent, then replace it with a corresponding word from variant sentences.\n
+    2. You don’t have to modify the original sentence if it already looks good.\n
+    3. Keep the sentence structure and word order intact.\n
+    4. Only replace words in the original sentence with ones from variant sentences. Do not simply add or delete words.\n
+    5. Try to make the corrected sentence have the same number of words as the original sentence.\n
+    6. Ignore punctuation.\n
+    7. Use U.S. English.\n
+    8. Output only one modified sentence and no explanation.\n"""
+    messages = construct_input(prompt)
+    return await get_prediction(client, model, messages, generation_config)
 
 
 
