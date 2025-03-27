@@ -19,6 +19,8 @@ import evaluate
 from tqdm.notebook import tqdm
 import logging
 from transformers import AutoTokenizer
+from itertools import product
+from collections import defaultdict
 import torch
 import string
 import time
@@ -74,6 +76,38 @@ def compute_levenshtein_distance(s1: str, s2: str) -> int:
                            dp[i - 1][j - 1] + cost)  # Substitution
 
     return dp[len_s1][len_s2]
+
+
+def align_hypotheses(nbest_list, reference):
+    """
+    Aligns the n-best hypotheses to the reference and selects the optimal combination.
+    """
+    ref_words = reference.split()
+    num_words = len(ref_words)
+    
+    # Convert each hypothesis to a list of words
+    nbest_tokens = [hyp.split() for hyp in nbest_list]
+    
+    # Ensure all hypotheses have the same length by padding (for simplicity)
+    max_len = max(len(hyp) for hyp in nbest_tokens)
+    nbest_tokens = [hyp + [""] * (max_len - len(hyp)) for hyp in nbest_tokens]
+    
+    # Create a table to store best word choices at each position
+    best_words = [defaultdict(int) for _ in range(max_len)]
+    
+    # Count occurrences of each word at each position
+    for hyp in nbest_tokens:
+        for i, word in enumerate(hyp):
+            best_words[i][word] += 1
+    
+    # Construct the best possible sequence by selecting the most frequent correct words
+    oracle_hyp = []
+    for i in range(max_len):
+        # Choose the most frequent word at this position that matches the reference
+        best_word = max(best_words[i].keys(), key=lambda w: (best_words[i][w], -wer(w, ref_words[i])))
+        oracle_hyp.append(best_word)
+    
+    return " ".join(oracle_hyp)
 
 # Helper functions for LLM processing
 def construct_input(question):
@@ -166,6 +200,22 @@ async def get_prediction(client: openai.AsyncOpenAI, model: str, messages: List[
         return ""
     
     
+async def check_availability(client, model):
+    """Check if model and client is available. If model is not yet available, try again after some delay."""
+    output = None
+    while output is None:
+        try:
+            output = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "Please introduce yourself."}],
+            )
+
+        except openai.APIError as e:
+            print(e)
+            sleep(10)
+
+    print(output.choices[0].message.content)    
+    
 ## Implementation of out-of-sync functions with current Jiwer version
 from collections import defaultdict
 from typing import List, Optional, Union
@@ -253,21 +303,7 @@ def collect_error_counts(output: Union[WordOutput, CharacterOutput]):
     return substitutions, insertions, deletions
 
 
-async def check_availability(client, model):
-    """Check if model and client is available. If model is not yet available, try again after some delay."""
-    output = None
-    while output is None:
-        try:
-            output = await client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": "Please introduce yourself."}],
-            )
 
-        except openai.APIError as e:
-            print(e)
-            sleep(10)
-
-    print(output.choices[0].message.content)
 
 
 if __name__ == "__main__":

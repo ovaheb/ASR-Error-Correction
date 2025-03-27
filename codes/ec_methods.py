@@ -195,12 +195,7 @@ async def zero_shot_instruct8_closest(hypotheses, client, model, generation_conf
 
 async def zero_shot_instruct9(hypotheses, client, model, generation_config):
     prompt = """You are an excellent assistant for speech recognition system. Your task is to check and correct potential
-    errors in speech transcriptions. Please follow the following rules:\n"""
-    prompt += "\n Here is the top hypothesis:\n" + hypotheses[0] + "\n These are less probable hypotheses which you can pick corrected words from:\n"""
-    for idx, hypothesis in enumerate(hypotheses[1:0]):
-        prompt += "<hypothesis"+ str(idx) + ">" + hypothesis + "</hypothesis"+ str(idx) + ">\n"
-    
-    prompt += """\n
+    errors in speech transcriptions. Please follow the following rules:\n\n
     1. If any word in the original sentence looks weird or inconsistent, then replace it with a corresponding word from variant sentences.\n
     2. You don’t have to modify the original sentence if it already looks good.\n
     3. Keep the sentence structure and word order intact.\n
@@ -209,9 +204,18 @@ async def zero_shot_instruct9(hypotheses, client, model, generation_config):
     6. Ignore punctuation.\n
     7. Use U.S. English.\n
     8. Output only one modified sentence and no explanation.\n"""
+    prompt += "\n Here is the top hypothesis:\n" + hypotheses[0] + "\n These are less probable hypotheses which you can pick corrected words from:\n"""
+    for idx, hypothesis in enumerate(hypotheses[1:0]):
+        prompt += "<hypothesis"+ str(idx) + ">" + hypothesis + "</hypothesis"+ str(idx) + ">\n"
+
     messages = construct_input(prompt)
     return await get_prediction(client, model, messages, generation_config)
 
+async def zero_shot_instruct9_closest(hypotheses, client, model, generation_config):
+    unconstrained_result = await zero_shot_instruct9(hypotheses, client, model, generation_config)
+    distances = [compute_levenshtein_distance(unconstrained_result, hyp) for hyp in hypotheses]
+    best_idx = np.argmin(distances)
+    return hypotheses[best_idx]
 
 
 
