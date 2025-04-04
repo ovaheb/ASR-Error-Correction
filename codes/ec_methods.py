@@ -7,6 +7,30 @@ def get_oracle_hypothesis(hypotheses, reference):
     best_idx = np.argmin(wers)
     return hypotheses[best_idx]
 
+def get_compositional_oracle_hypothesis(hypotheses, reference):
+    ref_words = reference.split()
+    nbest_tokens = [hyp.split() for hyp in hypotheses]
+    
+    # Find the optimal word at each position by minimizing WER
+    oracle_hyp = []
+    
+    # For each position in the reference
+    for i in range(len(ref_words)):
+        # Collect all tokens that appear at this position in the n-best hypotheses
+        candidates = [hyp[i] for hyp in nbest_tokens if i < len(hyp)]
+        
+        if candidates:
+            # Add the best candidate that minimizes WER to the oracle hypothesis
+            best_candidate = min(candidates, key=lambda word: jiwer.wer(reference, " ".join(oracle_hyp + [word] + ref_words[i+1:])))
+            oracle_hyp.append(best_candidate)
+        else:
+            # If no candidates are available, use the reference word as the fallback
+            oracle_hyp.append(ref_words[i])
+    
+    # Join the oracle hypothesis into a sentence
+    oracle_hypothesis = " ".join(oracle_hyp)
+    return oracle_hypothesis
+
 
 def get_top1_hypothesis(hypotheses, reference):
     """ Returns the first hypothesis (top 1)."""
@@ -151,7 +175,8 @@ async def zero_shot_instruct6_closest(hypotheses, client, model, generation_conf
 
 
 async def zero_shot_instruct7(hypotheses, client, model, generation_config):
-    prompt = """You are a helpful assistant that corrects ASR errors. You will be presented with ASR transcription hypotheses and your task is to correct any errors in it and generate one output sentence.\n If you come across errors in ASR transcription, make corrections that closely match the original transcription acoustically or phonetically\n
+    prompt = """You are a helpful assistant that corrects ASR errors. You will be presented with ASR transcription hypotheses and your task is to correct any errors in it and generate one output sentence.\n
+    If you come across errors in ASR transcription, make corrections that closely match the original transcription acoustically or phonetically.\n
     If you encounter grammatical errors, provide a corrected version adhering to proper grammar.\n
     Provide the most probable corrected transcription in string format.\n
     Do not output any additional text that is not the corrected transcription.\n
@@ -167,6 +192,64 @@ async def zero_shot_instruct7_closest(hypotheses, client, model, generation_conf
     distances = [compute_levenshtein_distance(unconstrained_result, hyp) for hyp in hypotheses]
     best_idx = np.argmin(distances)
     return hypotheses[best_idx]
+
+
+
+
+async def zero_shot_instruct7a(hypotheses, client, model, generation_config):
+    prompt = """You are a helpful assistant that corrects ASR errors. You will be presented with ASR transcription hypotheses and your task is to correct any errors in it and generate one output sentence.\n
+    If you come across errors in ASR transcription, make corrections that closely match the original transcription acoustically or phonetically.\n
+    Provide the most probable corrected transcription in string format.\n
+    Do not output any additional text that is not the corrected transcription.\n
+    Do not write any explanatory text that is not the corrected transcription.\n
+    Here are the hypotheses:\n""" 
+    for idx, hypothesis in enumerate(hypotheses):
+        prompt += "<hypothesis"+ str(idx) + ">" + hypothesis + "</hypothesis"+ str(idx) + ">\n"
+    messages = construct_input(prompt)
+    return await get_prediction(client, model, messages, generation_config)
+
+async def zero_shot_instruct7a_closest(hypotheses, client, model, generation_config):
+    unconstrained_result = await zero_shot_instruct7a(hypotheses, client, model, generation_config)
+    distances = [compute_levenshtein_distance(unconstrained_result, hyp) for hyp in hypotheses]
+    best_idx = np.argmin(distances)
+    return hypotheses[best_idx]
+
+async def zero_shot_instruct7b(hypotheses, client, model, generation_config):
+    prompt = """You are a helpful assistant that corrects ASR errors. You will be presented with ASR transcription hypotheses and your task is to correct any errors in it and generate one output sentence.\n
+    If you come across errors in ASR transcription, make corrections that closely match the original transcription acoustically or phonetically.\n
+    If you encounter grammatical errors, provide a corrected version adhering to proper grammar.\n
+    Provide the most probable corrected transcription in string format.\n
+    Output only the corrected transcription without any additional text.\n
+    Provide just the corrected transcription, with no explanations or commentary.\n
+    Here are the hypotheses:\n""" 
+    for idx, hypothesis in enumerate(hypotheses):
+        prompt += "<hypothesis"+ str(idx) + ">" + hypothesis + "</hypothesis"+ str(idx) + ">\n"
+    messages = construct_input(prompt)
+    return await get_prediction(client, model, messages, generation_config)
+
+async def zero_shot_instruct7b_closest(hypotheses, client, model, generation_config):
+    unconstrained_result = await zero_shot_instruct7b(hypotheses, client, model, generation_config)
+    distances = [compute_levenshtein_distance(unconstrained_result, hyp) for hyp in hypotheses]
+    best_idx = np.argmin(distances)
+    return hypotheses[best_idx]
+
+async def zero_shot_instruct7c(hypotheses, client, model, generation_config):
+    prompt = """You are a helpful assistant that corrects ASR errors. You will be presented with ASR transcription hypotheses and your task is to correct any errors in it and generate one output sentence.\n If you come across errors in ASR transcription, make corrections that closely match the original transcription acoustically or phonetically\n
+    Provide the most probable corrected transcription in string format.\n
+    Output only the corrected transcription without any additional text.\n
+    Provide just the corrected transcription, with no explanations or commentary.\n
+    Here are the hypotheses:\n""" 
+    for idx, hypothesis in enumerate(hypotheses):
+        prompt += "<hypothesis"+ str(idx) + ">" + hypothesis + "</hypothesis"+ str(idx) + ">\n"
+    messages = construct_input(prompt)
+    return await get_prediction(client, model, messages, generation_config)
+
+async def zero_shot_instruct7c_closest(hypotheses, client, model, generation_config):
+    unconstrained_result = await zero_shot_instruct7c(hypotheses, client, model, generation_config)
+    distances = [compute_levenshtein_distance(unconstrained_result, hyp) for hyp in hypotheses]
+    best_idx = np.argmin(distances)
+    return hypotheses[best_idx]
+
 
 async def zero_shot_instruct8(hypotheses, client, model, generation_config):
     prompt = """You are an excellent assistant for speech recognition system. Your task is to check and correct potential
@@ -204,8 +287,8 @@ async def zero_shot_instruct9(hypotheses, client, model, generation_config):
     6. Ignore punctuation.\n
     7. Use U.S. English.\n
     8. Output only one modified sentence and no explanation.\n"""
-    prompt += "\n Here is the top hypothesis:\n" + hypotheses[0] + "\n These are less probable hypotheses which you can pick corrected words from:\n"""
-    for idx, hypothesis in enumerate(hypotheses[1:0]):
+    prompt += "\nHere are all of the hypotheses:\n"
+    for idx, hypothesis in enumerate(hypotheses):
         prompt += "<hypothesis"+ str(idx) + ">" + hypothesis + "</hypothesis"+ str(idx) + ">\n"
 
     messages = construct_input(prompt)
